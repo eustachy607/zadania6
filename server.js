@@ -1,112 +1,96 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
-const crypto = require('crypto');
-const { faker } = require('@faker-js/faker');
 const app = express();
 
-const User = require('./models/user'); 
-const Book = require('./models-book'); 
+const Book = require('./models/book'); // Model Book
+
 // Middlewares
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-
+// Connect to MongoDB
 mongoose.connect('mongodb://localhost:27017/authdb', { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('MongoDB connected...'))
     .catch(err => console.log(err));
 
-const hashPassword = (password) => {
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, `sha512`).toString(`hex`);
-    return { salt, hash };
-};
-
-
-const validatePassword = (password, salt, hash) => {
-    const hashVerify = crypto.pbkdf2Sync(password, salt, 1000, 64, `sha512`).toString(`hex`);
-    return hash === hashVerify;
-};
-
-
-app.post('/register', async (req, res) => {
-    const { username, password } = req.body;
-    const { salt, hash } = hashPassword(password);
-    const user = new User({ username, password: `${salt}:${hash}` });
-
+// Insert operation
+app.post('/books', async (req, res) => {
+    const { title, author, genre, publishYear, pages } = req.body;
+    const book = new Book({ title, author, genre, publishYear, pages });
+    
     try {
-        await user.save();
-        res.status(201).send('User registered!');
+        await book.save();
+        res.status(201).send('Book added successfully');
     } catch (err) {
-        res.status(500).send('Error registering user');
+        res.status(500).send('Error adding book');
     }
 });
 
-
-app.post('/login', async (req, res) => {
-    const { username, password } = req.body;
-
-    try {
-        const user = await User.findOne({ username });
-
-        if (!user) {
-            return res.status(400).send('User not found');
-        }
-
-        const [salt, hash] = user.password.split(':');
-        const isValid = validatePassword(password, salt, hash);
-
-        if (isValid) {
-            res.status(200).send('Login successful');
-        } else {
-            res.status(400).send('Invalid credentials');
-        }
-    } catch (err) {
-        res.status(500).send('Error logging in');
-    }
-});
-
-
-app.get('/books/count', async (req, res) => {
-    try {
-        const count = await Book.countDocuments();
-        res.status(200).json({ count });
-    } catch (err) {
-        res.status(500).send('Error fetching count');
-    }
-});
-
-
+// Find operation
 app.get('/books', async (req, res) => {
-    const { genre, minPages, minYear } = req.query;
+    const { title, author, genre } = req.query;
     let query = {};
-
-    if (genre) {
-        query.genre = genre;
-    }
-
-    if (minPages) {
-        query.pages = { $gte: Number(minPages) };
-    }
-
-    if (minYear) {
-        query.publishYear = { $gte: Number(minYear) };
-    }
+    if (title) query.title = title;
+    if (author) query.author = author;
+    if (genre) query.genre = genre;
 
     try {
         const books = await Book.find(query);
         res.status(200).json(books);
     } catch (err) {
-        res.status(500).send('Error fetching books');
+        res.status(500).send('Error finding books');
     }
 });
 
+// Update operation
+app.put('/books/:id', async (req, res) => {
+    const { id } = req.params;
+    const updateData = req.body;
 
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
+    try {
+        await Book.findByIdAndUpdate(id, updateData);
+        res.status(200).send('Book updated successfully');
+    } catch (err) {
+        res.status(500).send('Error updating book');
+    }
 });
 
+// Delete operation
+app.delete('/books/:id', async (req, res) => {
+    const { id } = req.params;
 
+    try {
+        await Book.findByIdAndDelete(id);
+        res.status(200).send('Book deleted successfully');
+    } catch (err) {
+        res.status(500).send('Error deleting book');
+    }
+});
+
+// Count Documents
+app.get('/books/count', async (req, res) => {
+    try {
+        const count = await Book.countDocuments();
+        res.status(200).json({ count });
+    } catch (err) {
+        res.status(500).send('Error counting books');
+    }
+});
+
+// Retrieve Distinct Values of a Field
+app.get('/books/distinct/:field', async (req, res) => {
+    const { field } = req.params;
+
+    try {
+        const distinctValues = await Book.distinct(field);
+        res.status(200).json(distinctValues);
+    } catch (err) {
+        res.status(500).send(`Error retrieving distinct values for field: ${field}`);
+    }
+});
+
+// Start the server
 const PORT = 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
